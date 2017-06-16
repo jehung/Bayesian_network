@@ -220,12 +220,11 @@ def sampling_question():
     factor = 0
     return options[choice], factor
 
-'''
+
 power_plant = make_power_plant_net()
-print(type(power_plant))
-print(power_plant.get_node_by_name('temperature'))
-print(power_plant.get_node_by_name('temperature').dist)
-#power_plant1 = set_probability(power_plant)
+#print(type(power_plant))
+#print(power_plant.get_node_by_name('temperature'))
+#print(power_plant.get_node_by_name('temperature').dist)
+power_plant1 = set_probability(power_plant)
 #print(type(power_plant1))
-#ans = get_alarm_prob(power_plant1, True)
-'''
+ans = get_alarm_prob(power_plant1, True)
