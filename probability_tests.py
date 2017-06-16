@@ -21,7 +21,10 @@ class ProbabilityTests(unittest.TestCase):
         Note that all nodes have to be named predictably for tests to run correctly."""
         # first test temperature distribution
         power_plant = make_power_plant_net()
+<<<<<<< HEAD
         power_plant = set_probability(power_plant)
+=======
+>>>>>>> a2d1df124147696b54221a867e0bb9b3c35fe2b8
         T_node = power_plant.get_node_by_name('temperature')
         self.assertTrue(T_node is not None, msg='No temperature node initialized')
             
