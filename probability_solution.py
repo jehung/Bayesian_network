@@ -287,54 +287,86 @@ def Gibbs_sampler(bayes_net, initial_state):
     Use the user-constructed inference engine
     Reference: Gibbs Sampling for Approximate Inference in Bayesian Networks
     """
-    sample = tuple(initial_state)
-    #A = bayes_net.get_node_by_name('A')
+    sample = initial_state
+    #sample = tuple(initial_state)
+    A = bayes_net.get_node_by_name('A')
     B = bayes_net.get_node_by_name('B')
     C = bayes_net.get_node_by_name('C')
-    #AvB = bayes_net.get_node_by_name('AvB')
+    AvB = bayes_net.get_node_by_name('AvB')
     BvC = bayes_net.get_node_by_name('BvC')
-    #CvA = bayes_net.get_node_by_name('CvA')
-    #A_table = A.dist.table
+    CvA = bayes_net.get_node_by_name('CvA')
     B_table = B.dist.table
     C_table = C.dist.table
-    #AB_table = AvB.dist.table
+    AB_table = AvB.dist.table
     BC_table = BvC.dist.table
-    #CA_table = CvA.dist.table
+    CA_table = CvA.dist.table
 
-    # variable = [a_choice, b_choice, c_choice]
-    variable = [0, 1, 2]
-    sample = [0, 0, 0, 0, 0, 2]
-
-    # print('table', BC_table[b_choice][c_choice])
-    for i in range(len(variable)):  # 3: this is the first 3 elements in initial_state, a, b, c
-        a_choice = sample[0]
-        b_choice = sample[1]
-        c_choice = sample[2]
-        if i == 0:
-            a_chocie = random.randint(0, 3)
-        elif i == 1:
-            b_choice = random.randint(0, 3)
+    variable = [A, B, C, BvC]
+    for var in variable:
+        ## set the value of var by sampling, conditioned on Markov Chain blanket
+        if var == A:
+            rand_choice = random.randint(0, 3)
+            gibbs = sum(AB_table[rand_choice,:,:])*sum(AB_table[:,sample[1],:])
+            gibbs_norm = normalize(gibbs)
+            prob = random.uniform(0, 1)
+            if prob < gibbs_norm[0]:
+                choice = 0
+            elif prob >= gibbs_norm[0] and prob < gibbs_norm[1]:
+                choice = 1
+            elif prob >= gibbs_norm[1] and prob < gibbs_norm[2]:
+                choice = 2
+            else:
+                choice = 3
+            sample[0] = choice
+        elif var == B:
+            rand_choice = random.randint(0, 3)
+            gibbs = sum(AB_table[sample[0],:,:])*sum(AB_table[:,rand_choice,:])* \
+                    sum(BC_table[rand_choice,:,:]) * sum(BC_table[:,sample[2], :])
+            gibbs_norm = normalize(gibbs)
+            print('B', gibbs_norm)
+            prob = random.uniform(0, 1)
+            if prob < gibbs_norm[0]:
+                choice = 0
+            elif prob >= gibbs_norm[0] and prob < gibbs_norm[1]:
+                choice = 1
+            elif prob >= gibbs_norm[1] and prob < gibbs_norm[2]:
+                choice = 2
+            else:
+                choice = 3
+            sample[1] = choice
+        elif var == C:
+            rand_choice = random.randint(0, 3)
+            gibbs = sum(CA_table[rand_choice,:, :]) * sum(CA_table[:,sample[0], :]) * \
+                    sum(BC_table[sample[1], :, :]) * sum(BC_table[:,rand_choice, :])
+            gibbs_norm = normalize(gibbs)
+            print('C', gibbs_norm)
+            prob = random.uniform(0, 1)
+            if prob < gibbs_norm[0]:
+                choice = 0
+            elif prob >= gibbs_norm[0] and prob < gibbs_norm[1]:
+                choice = 1
+            elif prob >= gibbs_norm[1] and prob < gibbs_norm[2]:
+                choice = 2
+            else:
+                choice = 3
+            sample[2] = choice
         else:
-            c_choice = random.randint(0, 3)
-
-        #top = BC_table[b_choice][c_choice] * AB_table[a_choice][b_choice] * CA_table[c_choice][a_choice] * \
-        #      A_table[a_choice] * B_table[b_choice] * C_table[c_choice]
-        #bottom = AB_table[a_choice][b_choice] * CA_table[c_choice][a_choice] * \
-        #         A_table[a_choice] * B_table[b_choice]
-        #ans = list(top / bottom)
-        print('ans', ans)
-        ans1 = normalize(ans)
-        print('ans1', ans1)
-        prob = ans1.index(max(ans1))
-        #if random.uniform(0, 1) < ans[1]
-
-        if max(ans1) > random.uniform(0, 1):
-            sample = list(sample)
-            sample[i] = prob
-        sample = tuple(sample)
-        print(i)
-        print(sample)
+            rand_choice = random.randint(0, 2)
+            gibbs = sum(BC_table[:, :, rand_choice]) * sum(BC_table[:, :, rand_choice])
+            gibbs_norm = normalize(gibbs)
+            print('D', gibbs_norm)
+            prob = random.uniform(0, 1)
+            if prob < gibbs_norm[0]:
+                choice = 0
+            elif prob >= gibbs_norm[0] and prob < gibbs_norm[1]:
+                choice = 1
+            elif prob >= gibbs_norm[1] and prob < gibbs_norm[2]:
+                choice = 2
+            else:
+                choice = 3
+            sample[4] = choice
     return sample
+
 
 
 def MH_sampler(bayes_net, initial_state):
@@ -438,5 +470,7 @@ prob = calculate_posterior(games)
 print(prob)
 print(prob - [0.25, 0.42, 0.31])
 
-gibbs = Gibbs_sampler(games, [0, 0, 0, 0, 2])
+gibbs = Gibbs_sampler(games, [0, 0, 0, 0, 0, 2])
 print(gibbs)
+
+
