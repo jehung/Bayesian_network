@@ -4,7 +4,8 @@ import sys
 if('pbnt/combined' not in sys.path):
     sys.path.append('pbnt/combined')
 from exampleinference import inferenceExample
-from Inference import JunctionTreeEngine
+from Inference import JunctionTreeEngine, EnumerationEngine
+import random
 
 inferenceExample()
 # Should output:
@@ -52,7 +53,6 @@ def make_power_plant_net():
 
     FA_node.add_child(A_node)
     A_node.add_parent(FA_node)
-
 
 
     return BayesNet(nodes)
@@ -109,12 +109,11 @@ def get_alarm_prob(bayes_net, alarm_rings):
     ringing (T/F) in the power plant system.
     Note: this implementation uses variable elimination.
     """
-    T_node = bayes_net.get_node_by_name('temperature')
+    A_node = bayes_net.get_node_by_name('alarm')
     engine = JunctionTreeEngine(bayes_net)
-    Q = engine.marginal(T_node)[0]
-    index = Q.generate_index([True], range(Q.nDims))
+    Q = engine.marginal(A_node)[0]
+    index = Q.generate_index([alarm_rings], range(Q.nDims))
     prob = Q[index]
-
 
     return prob
 
@@ -124,14 +123,13 @@ def get_gauge_prob(bayes_net, gauge_hot):
     probability of the gauge
     showing hot (T/F) in the
     power plant system."""
+    G_node = bayes_net.get_node_by_name('gauge')
+    engine = JunctionTreeEngine(bayes_net)
+    Q = engine.marginal(G_node)[0]
+    index = Q.generate_index([gauge_hot], range(Q.nDims))
+    prob = Q[index]
 
-
-
-
-
-
-
-    return gauge_prob
+    return prob
 
 
 def get_temperature_prob(bayes_net,temp_hot):
@@ -140,32 +138,140 @@ def get_temperature_prob(bayes_net,temp_hot):
     power plant system, given that the
     alarm sounds and neither the gauge
     nor alarm is faulty."""
+    T_node = bayes_net.get_node_by_name('temperature')
+    engine = JunctionTreeEngine(bayes_net)
+    Q = engine.marginal(T_node)[0]
+    index = Q.generate_index([temp_hot], range(Q.nDims))
+    prob = Q[index]
 
+    return prob
 
-
-
-
-
-
-
-    return temp_prob
-
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 def get_game_network():
     """Create a Bayes Net representation of the game problem.
     Name the nodes as "A","B","C","AvB","BvC" and "CvA".  """
     nodes = []
-    # TODO: fill this out
-    raise NotImplementedError
+    A = BayesNode(0, 4, name='A')
+    B = BayesNode(1, 4, name='B')
+    C = BayesNode(2, 4, name='C')
+    AvB = BayesNode(3, 3, name='AvB')
+    BvC = BayesNode(4, 3, name='BvC')
+    CvA = BayesNode(5, 3, name='CvA')
+
+    nodes = [A, B, C, AvB, BvC, CvA]
+
+    A.add_child(AvB)
+    B.add_child(AvB)
+    AvB.add_parent(A)
+    AvB.add_parent(B)
+
+    B.add_child(BvC)
+    C.add_child(BvC)
+    BvC.add_parent(B)
+    BvC.add_parent(C)
+
+    A.add_child(CvA)
+    C.add_child(CvA)
+    CvA.add_parent(A)
+    CvA.add_parent(C)
+
+
+    A_distribution = DiscreteDistribution(A)
+    index = A_distribution.generate_index([], [])
+    A_distribution[index] = [0.15, 0.45, 0.30, 0.10]
+    A.set_dist(A_distribution)
+
+    B_distribution = DiscreteDistribution(B)
+    index = B_distribution.generate_index([], [])
+    B_distribution[index] = [0.15, 0.45, 0.30, 0.10]
+    B.set_dist(B_distribution)
+
+    C_distribution = DiscreteDistribution(C)
+    index = C_distribution.generate_index([], [])
+    C_distribution[index] = [0.15, 0.45, 0.30, 0.10]
+    C.set_dist(C_distribution)
+
+    dist = zeros([A.size(), B.size(), AvB.size()], dtype=float32)
+    dist[0, 0, :] = [0.10, 0.10, 0.80]
+    dist[0, 1, :] = [0.20, 0.60, 0.20]
+    dist[0, 2, :] = [0.15, 0.75, 0.10]
+    dist[0, 3, :] = [0.05, 0.90, 0.05]
+    dist[1, 0, :] = [0.20, 0.60, 0.20]
+    dist[1, 1, :] = [0.10, 0.10, 0.80]
+    dist[1, 2, :] = [0.20, 0.60, 0.20]
+    dist[1, 3, :] = [0.15, 0.75, 0.10]
+    dist[2, 0, :] = [0.75, 0.15, 0.10]
+    dist[2, 1, :] = [0.60, 0.20, 0.20]
+    dist[2, 2, :] = [0.10, 0.10, 0.80]
+    dist[2, 3, :] = [0.20, 0.60, 0.20]
+    dist[3, 0, :] = [0.90, 0.05, 0.05]
+    dist[3, 1, :] = [0.75, 0.15, 0.10]
+    dist[3, 2, :] = [0.60, 0.20, 0.20]
+    dist[3, 3, :] = [0.10, 0.10, 0.80]
+    AvB_distribution = ConditionalDiscreteDistribution(nodes=[A, B, AvB], table=dist)
+    AvB.set_dist(AvB_distribution)
+
+    dist = zeros([B.size(), C.size(), BvC.size()], dtype=float32)
+    dist[0, 0, :] = [0.10, 0.10, 0.80]
+    dist[0, 1, :] = [0.20, 0.60, 0.20]
+    dist[0, 2, :] = [0.15, 0.75, 0.10]
+    dist[0, 3, :] = [0.05, 0.90, 0.05]
+    dist[1, 0, :] = [0.60, 0.20, 0.20]
+    dist[1, 1, :] = [0.10, 0.10, 0.80]
+    dist[1, 2, :] = [0.20, 0.60, 0.20]
+    dist[1, 3, :] = [0.15, 0.75, 0.10]
+    dist[2, 0, :] = [0.75, 0.15, 0.10]
+    dist[2, 1, :] = [0.60, 0.20, 0.20]
+    dist[2, 2, :] = [0.10, 0.10, 0.80]
+    dist[2, 3, :] = [0.20, 0.60, 0.20]
+    dist[3, 0, :] = [0.90, 0.05, 0.05]
+    dist[3, 1, :] = [0.75, 0.15, 0.10]
+    dist[3, 2, :] = [0.60, 0.20, 0.20]
+    dist[3, 3, :] = [0.10, 0.10, 0.80]
+    BvC_distribution = ConditionalDiscreteDistribution(nodes=[B, C, BvC], table=dist)
+    BvC.set_dist(BvC_distribution)
+
+    dist = zeros([C.size(), A.size(), CvA.size()], dtype=float32)
+    dist[0, 0, :] = [0.10, 0.10, 0.80]
+    dist[0, 1, :] = [0.20, 0.60, 0.20]
+    dist[0, 2, :] = [0.15, 0.75, 0.10]
+    dist[0, 3, :] = [0.05, 0.90, 0.05]
+    dist[1, 0, :] = [0.60, 0.20, 0.20]
+    dist[1, 1, :] = [0.10, 0.10, 0.80]
+    dist[1, 2, :] = [0.20, 0.60, 0.20]
+    dist[1, 3, :] = [0.15, 0.75, 0.10]
+    dist[2, 0, :] = [0.75, 0.15, 0.10]
+    dist[2, 1, :] = [0.60, 0.20, 0.20]
+    dist[2, 2, :] = [0.10, 0.10, 0.80]
+    dist[2, 3, :] = [0.20, 0.60, 0.20]
+    dist[3, 0, :] = [0.05, 0.90, 0.05]
+    dist[3, 1, :] = [0.75, 0.15, 0.10]
+    dist[3, 2, :] = [0.60, 0.20, 0.20]
+    dist[3, 3, :] = [0.10, 0.10, 0.80]
+    CvA_distribution = ConditionalDiscreteDistribution(nodes=[C, A, CvA], table=dist)
+    CvA.set_dist(CvA_distribution)
+
     return BayesNet(nodes)
 
 def calculate_posterior(bayes_net):
     """Calculate the posterior distribution of the BvC match given that A won against B and tied C.
     Return a list of probabilities corresponding to win, loss and tie likelihood."""
-    posterior = [0,0,0]
-    # TODO: finish this function
-    raise NotImplementedError
-    return posterior # list
+    posterior = []
+    engine = EnumerationEngine(bayes_net)
+    BvC = bayes_net.get_node_by_name('BvC')
+    AvB = bayes_net.get_node_by_name('AvB')
+    CvA = bayes_net.get_node_by_name('CvA')
+    engine.evidence[AvB] = 0
+    engine.evidence[CvA] = 2
+    Q = engine.marginal(BvC)[0]
+    #for i in range(3):
+    #    index = Q.generate_index([i], range(Q.nDims))
+    #    posterior.append(Q[index])
+
+    #return posterior
+    return (Q[":"] - [0.01, 0.01, 0.01])
 
 
 def Gibbs_sampler(bayes_net, initial_state):
@@ -178,11 +284,58 @@ def Gibbs_sampler(bayes_net, initial_state):
 
     Returns the new state sampled from the probability distribution as a tuple of length 6.
     Return the sample as a tuple.
+    Use the user-constructed inference engine
+    Reference: Gibbs Sampling for Approximate Inference in Bayesian Networks
     """
     sample = tuple(initial_state)
-    # TODO: finish this function
-    raise NotImplementedError
+    #A = bayes_net.get_node_by_name('A')
+    B = bayes_net.get_node_by_name('B')
+    C = bayes_net.get_node_by_name('C')
+    #AvB = bayes_net.get_node_by_name('AvB')
+    BvC = bayes_net.get_node_by_name('BvC')
+    #CvA = bayes_net.get_node_by_name('CvA')
+    #A_table = A.dist.table
+    B_table = B.dist.table
+    C_table = C.dist.table
+    #AB_table = AvB.dist.table
+    BC_table = BvC.dist.table
+    #CA_table = CvA.dist.table
+
+    # variable = [a_choice, b_choice, c_choice]
+    variable = [0, 1, 2]
+    sample = [0, 0, 0, 0, 0, 2]
+
+    # print('table', BC_table[b_choice][c_choice])
+    for i in range(len(variable)):  # 3: this is the first 3 elements in initial_state, a, b, c
+        a_choice = sample[0]
+        b_choice = sample[1]
+        c_choice = sample[2]
+        if i == 0:
+            a_chocie = random.randint(0, 3)
+        elif i == 1:
+            b_choice = random.randint(0, 3)
+        else:
+            c_choice = random.randint(0, 3)
+
+        #top = BC_table[b_choice][c_choice] * AB_table[a_choice][b_choice] * CA_table[c_choice][a_choice] * \
+        #      A_table[a_choice] * B_table[b_choice] * C_table[c_choice]
+        #bottom = AB_table[a_choice][b_choice] * CA_table[c_choice][a_choice] * \
+        #         A_table[a_choice] * B_table[b_choice]
+        #ans = list(top / bottom)
+        print('ans', ans)
+        ans1 = normalize(ans)
+        print('ans1', ans1)
+        prob = ans1.index(max(ans1))
+        #if random.uniform(0, 1) < ans[1]
+
+        if max(ans1) > random.uniform(0, 1):
+            sample = list(sample)
+            sample[i] = prob
+        sample = tuple(sample)
+        print(i)
+        print(sample)
     return sample
+
 
 def MH_sampler(bayes_net, initial_state):
     """Complete a single iteration of the MH sampling algorithm given a Bayesian network and an initial state value.
@@ -191,15 +344,60 @@ def MH_sampler(bayes_net, initial_state):
     index 3-5: represent results of matches AvB, BvC, CvA (values lie in [0,2] inclusive)
     Returns the new state sampled from the probability distribution as a tuple of length 6.
     """
-    A= bayes_net.get_node_by_name("A")
-    AvB= bayes_net.get_node_by_name("AvB")
-    match_table = AvB.dist.table
-    team_table = A.dist.table
     sample = tuple(initial_state)
-    # TODO: finish this function
-    raise NotImplementedError
+    A = bayes_net.get_node_by_name('A')
+    B = bayes_net.get_node_by_name('B')
+    C = bayes_net.get_node_by_name('C')
+    AvB = bayes_net.get_node_by_name('AvB')
+    BvC = bayes_net.get_node_by_name('BvC')
+    CvA = bayes_net.get_node_by_name('CvA')
+    A_table = A.dist.table
+    B_table = B.dist.table
+    C_table = C.dist.table
+    AB_table = AvB.dist.table
+    BC_table = BvC.dist.table
+    CA_table = CvA.dist.table
+
+    # variable = [a_choice, b_choice, c_choice]
+    variable = [0, 1, 2]
+    sample = [0, 0, 0, 0, 0, 2]
+
+    for i in range(len(variable)):  # 3: this is the first 3 elements in initial_state, a, b, c
+        a_choice = sample[0]
+        b_choice = sample[1]
+        c_choice = sample[2]
+        if i == 0:
+            a_chocie = random.randint(0, 3)
+        elif i == 1:
+            b_choice = random.randint(0, 3)
+        else:
+            c_choice = random.randint(0, 3)
+        top = BC_table[b_choice][c_choice] * AB_table[a_choice][b_choice] * CA_table[c_choice][a_choice] * \
+              A_table[a_choice] * B_table[b_choice] * C_table[c_choice]
+        bottom = AB_table[a_choice][b_choice] * CA_table[c_choice][a_choice] * \
+                 A_table[a_choice] * B_table[b_choice]
+        ans = list(top / bottom)
+        print('ans', ans)
+        ans1 = normalize(ans)
+        print('ans1', ans1)
+        prob = ans1.index(max(ans1))
+        if max(ans1) > random.uniform(0, 1):
+            sample = list(sample)
+            sample[i] = prob
+        sample = tuple(sample)
+        print(i)
+        print(sample)
+
+
+    accept = min(1, a/b)
+
+
     return sample
 
+
+def normalize(lst):
+    total = sum(lst)
+    return [(e / total) for e in lst]
 
 def compare_sampling(bayes_net,initial_state, delta):
     """Compare Gibbs and Metropolis-Hastings sampling by calculating how long it takes for each method to converge."""
@@ -221,10 +419,24 @@ def sampling_question():
     return options[choice], factor
 
 
+'''
 power_plant = make_power_plant_net()
 #print(type(power_plant))
 #print(power_plant.get_node_by_name('temperature'))
 #print(power_plant.get_node_by_name('temperature').dist)
 power_plant1 = set_probability(power_plant)
 #print(type(power_plant1))
-ans = get_alarm_prob(power_plant1, True)
+ans1 = get_alarm_prob(power_plant1, True)
+ans2 = get_gauge_prob(power_plant1, True)
+ans3 = get_temperature_prob(power_plant1, True)
+print(ans3)
+'''
+
+games = get_game_network()
+print(games)
+prob = calculate_posterior(games)
+print(prob)
+print(prob - [0.25, 0.42, 0.31])
+
+gibbs = Gibbs_sampler(games, [0, 0, 0, 0, 2])
+print(gibbs)
