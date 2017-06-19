@@ -6,6 +6,7 @@ if('pbnt/combined' not in sys.path):
 from exampleinference import inferenceExample
 from Inference import JunctionTreeEngine, EnumerationEngine
 import random
+import math
 
 inferenceExample()
 # Should output:
@@ -21,7 +22,7 @@ inferenceExample()
 
 from Node import BayesNode
 from Graph import BayesNet
-from numpy import zeros, float32
+from numpy import zeros, float32, ones, digitize
 from Distribution import DiscreteDistribution, ConditionalDiscreteDistribution
 from Inference import JunctionTreeEngine
 
@@ -287,7 +288,14 @@ def Gibbs_sampler(bayes_net, initial_state):
     Use the user-constructed inference engine
     Reference: Gibbs Sampling for Approximate Inference in Bayesian Networks
     """
-    sample = initial_state
+    # TODO: If no init_state is given, return something else
+    # TODO: connect head and tail
+
+    if initial_state is not None:
+        sample = initial_state
+    else:
+        pass
+
     #sample = tuple(initial_state)
     A = bayes_net.get_node_by_name('A')
     B = bayes_net.get_node_by_name('B')
@@ -302,70 +310,68 @@ def Gibbs_sampler(bayes_net, initial_state):
     CA_table = CvA.dist.table
 
     variable = [A, B, C, BvC]
+
     for var in variable:
         ## set the value of var by sampling, conditioned on Markov Chain blanket
         if var == A:
             rand_choice = random.randint(0, 3)
             gibbs = sum(AB_table[rand_choice,:,:])*sum(AB_table[:,sample[1],:])
             gibbs_norm = normalize(gibbs)
+            #print('norm', gibbs_norm)
+            gibbs_norm_sorted = sorted(gibbs_norm)
             prob = random.uniform(0, 1)
-            if prob < gibbs_norm[0]:
-                choice = 0
+            #print('prob', prob)
+            if prob < gibbs_norm_sorted[0]:
+                choice = gibbs_norm.index(gibbs_norm_sorted[0])
             elif prob >= gibbs_norm[0] and prob < gibbs_norm[1]:
-                choice = 1
+                choice = gibbs_norm.index(gibbs_norm_sorted[1])
             elif prob >= gibbs_norm[1] and prob < gibbs_norm[2]:
-                choice = 2
+                choice = gibbs_norm.index(gibbs_norm_sorted[2])
             else:
-                choice = 3
+                choice = gibbs_norm.index(gibbs_norm_sorted[2])+1
             sample[0] = choice
         elif var == B:
             rand_choice = random.randint(0, 3)
             gibbs = sum(AB_table[sample[0],:,:])*sum(AB_table[:,rand_choice,:])* \
                     sum(BC_table[rand_choice,:,:]) * sum(BC_table[:,sample[2], :])
             gibbs_norm = normalize(gibbs)
-            print('B', gibbs_norm)
+            gibbs_norm_sorted = sorted(gibbs_norm)
+            #print('B', gibbs_norm)
             prob = random.uniform(0, 1)
             if prob < gibbs_norm[0]:
-                choice = 0
+                choice = gibbs_norm.index(gibbs_norm_sorted[0])
             elif prob >= gibbs_norm[0] and prob < gibbs_norm[1]:
-                choice = 1
+                choice = gibbs_norm.index(gibbs_norm_sorted[1])
             elif prob >= gibbs_norm[1] and prob < gibbs_norm[2]:
-                choice = 2
+                choice = gibbs_norm.index(gibbs_norm_sorted[2])
             else:
-                choice = 3
+                choice = gibbs_norm.index(gibbs_norm_sorted[2])+1
             sample[1] = choice
         elif var == C:
             rand_choice = random.randint(0, 3)
             gibbs = sum(CA_table[rand_choice,:, :]) * sum(CA_table[:,sample[0], :]) * \
                     sum(BC_table[sample[1], :, :]) * sum(BC_table[:,rand_choice, :])
             gibbs_norm = normalize(gibbs)
-            print('C', gibbs_norm)
+            gibbs_norm_sorted = sorted(gibbs_norm)
+            #print('C', gibbs_norm)
             prob = random.uniform(0, 1)
             if prob < gibbs_norm[0]:
-                choice = 0
+                choice = gibbs_norm.index(gibbs_norm_sorted[0])
             elif prob >= gibbs_norm[0] and prob < gibbs_norm[1]:
-                choice = 1
+                choice = gibbs_norm.index(gibbs_norm_sorted[1])
             elif prob >= gibbs_norm[1] and prob < gibbs_norm[2]:
-                choice = 2
+                choice = gibbs_norm.index(gibbs_norm_sorted[2])
             else:
-                choice = 3
+                choice = gibbs_norm.index(gibbs_norm_sorted[2])+1
             sample[2] = choice
         else:
             rand_choice = random.randint(0, 2)
-            gibbs = sum(BC_table[:, :, rand_choice]) * sum(BC_table[:, :, rand_choice])
-            gibbs_norm = normalize(gibbs)
-            print('D', gibbs_norm)
+            gibbs = BC_table[sample[1], sample[2], rand_choice]*BC_table[sample[1], sample[2], rand_choice]
             prob = random.uniform(0, 1)
-            if prob < gibbs_norm[0]:
-                choice = 0
-            elif prob >= gibbs_norm[0] and prob < gibbs_norm[1]:
-                choice = 1
-            elif prob >= gibbs_norm[1] and prob < gibbs_norm[2]:
-                choice = 2
-            else:
-                choice = 3
-            sample[4] = choice
-    return sample
+            if prob >= gibbs:
+                sample[4] = rand_choice
+    print(sample)
+    return tuple(sample)
 
 
 
@@ -376,7 +382,8 @@ def MH_sampler(bayes_net, initial_state):
     index 3-5: represent results of matches AvB, BvC, CvA (values lie in [0,2] inclusive)
     Returns the new state sampled from the probability distribution as a tuple of length 6.
     """
-    sample = tuple(initial_state)
+    sample = initial_state
+    # sample = tuple(initial_state)
     A = bayes_net.get_node_by_name('A')
     B = bayes_net.get_node_by_name('B')
     C = bayes_net.get_node_by_name('C')
@@ -390,57 +397,126 @@ def MH_sampler(bayes_net, initial_state):
     BC_table = BvC.dist.table
     CA_table = CvA.dist.table
 
-    # variable = [a_choice, b_choice, c_choice]
-    variable = [0, 1, 2]
-    sample = [0, 0, 0, 0, 0, 2]
+    variable = [A, B, C, AvB, BvC, CvA]
+    for var in variable:
+        if var == A:
+            candidate = [random.randint(0, 3) for e in variable]
+            #print('A candidate', candidate)
+            candidate_prob = A_table[candidate[0]]
+            #print('here', candidate_prob)
+            sample_prob = A_table[sample[0]]
+            accept_func = min(1, candidate_prob/sample_prob)
+            #print('here', accept_func)
+            prob = random.uniform(0, 1)
+            if prob > accept_func:
+                sample[0] = candidate[0]
 
-    for i in range(len(variable)):  # 3: this is the first 3 elements in initial_state, a, b, c
-        a_choice = sample[0]
-        b_choice = sample[1]
-        c_choice = sample[2]
-        if i == 0:
-            a_chocie = random.randint(0, 3)
-        elif i == 1:
-            b_choice = random.randint(0, 3)
+        elif var == B:
+            candidate = [random.randint(0, 3) for e in variable]
+            #print('candidate', candidate)
+            candidate_prob = B_table[candidate[1]]
+            sample_prob = B_table[sample[1]]
+            accept_func = min(1, candidate_prob / sample_prob)
+            #print('here', accept_func)
+            prob = random.uniform(0, 1)
+            if prob > accept_func:
+                sample[1] = candidate[1]
+        elif var == C:
+            candidate = [random.randint(0, 3) for e in variable]
+            #print('candidate', candidate)
+            candidate_prob = C_table[candidate[2]]
+            sample_prob = C_table[sample[2]]
+            accept_func = min(1, candidate_prob / sample_prob)
+            #print('here', accept_func)
+            prob = random.uniform(0, 1)
+            if prob > accept_func:
+                sample[2] = candidate[2]
+        elif var == AvB:
+            candidate = [random.randint(0, 2) for e in variable]
+            #print('candidate', candidate)
+            candidate_prob = AB_table[candidate[0], candidate[1], :]
+            sample_prob = AB_table[sample[0], sample[1], :]
+            accept_func = [min(1, e) for e in [c / s for c, s in zip(candidate_prob, sample_prob)]]
+            #print('here', accept_func)
+            prob = random.uniform(0, 1)
+            sample[3] = determine_bin(prob, accept_func)
+        elif var == BvC:
+            candidate = [random.randint(0, 2) for e in variable]
+            #print('candidate', candidate)
+            candidate_prob = BC_table[candidate[1], candidate[2], :]
+            sample_prob = BC_table[sample[1], sample[2], :]
+            accept_func = [min(1, e) for e in [c / s for c, s in zip(candidate_prob, sample_prob)]]
+            #print('here', accept_func)
+            prob = random.uniform(0, 1)
+            sample[4] = determine_bin(prob, accept_func)
         else:
-            c_choice = random.randint(0, 3)
-        top = BC_table[b_choice][c_choice] * AB_table[a_choice][b_choice] * CA_table[c_choice][a_choice] * \
-              A_table[a_choice] * B_table[b_choice] * C_table[c_choice]
-        bottom = AB_table[a_choice][b_choice] * CA_table[c_choice][a_choice] * \
-                 A_table[a_choice] * B_table[b_choice]
-        ans = list(top / bottom)
-        print('ans', ans)
-        ans1 = normalize(ans)
-        print('ans1', ans1)
-        prob = ans1.index(max(ans1))
-        if max(ans1) > random.uniform(0, 1):
-            sample = list(sample)
-            sample[i] = prob
-        sample = tuple(sample)
-        print(i)
-        print(sample)
-
-
-    accept = min(1, a/b)
-
+            candidate = [random.randint(0, 2) for e in variable]
+            #print('candidate', candidate)
+            candidate_prob = CA_table[candidate[2], candidate[0], :]
+            sample_prob = CA_table[sample[2], sample[0], :]
+            accept_func = [min(1, e) for e in [c / s for c, s in zip(candidate_prob, sample_prob)]]
+            #print('here', accept_func)
+            prob = random.uniform(0, 1)
+            sample[5] = determine_bin(prob, accept_func)
 
     return sample
 
-
 def normalize(lst):
+    if isinstance(lst, dict):
+        new_list = {}
+        total = sum(lst.values())
+        for key in lst:
+            new_list[key] = lst[key] / total
+        return new_list
     total = sum(lst)
+
     return [(e / total) for e in lst]
+
+def f(x):
+    mu = 0
+    sig = 1
+    return (1/(math.sqrt(2*math.pi*sig**2)))*(math.e**(-((x-mu)**2)/(2*sig**2)))
+
+
+def determine_bin(num, lst):
+    sort_lst = sorted(lst)
+    print('sorted', sort_lst)
+    for i in range(len(sort_lst)-1):
+        if num >= sort_lst[i] and num < sort_lst[i+1]:
+            return lst.index(sort_lst[i+1])-1
 
 def compare_sampling(bayes_net,initial_state, delta):
     """Compare Gibbs and Metropolis-Hastings sampling by calculating how long it takes for each method to converge."""
+    node = bayes_net.get_node_by_name('BvC')  # counts is for BvC only
+    sample = initial_state
     Gibbs_count = 0
-    MH_count = 0
-    MH_rejection_count = 0
-    Gibbs_convergence = [0,0,0] # posterior distribution of the BvC match as produced by Gibbs
-    MH_convergence = [0,0,0] # posterior distribution of the BvC match as produced by MH
-    # TODO: finish this function
-    raise NotImplementedError
-    return Gibbs_convergence, MH_convergence, Gibbs_count, MH_count, MH_rejection_count
+    counts = {x: 1.0 for x in range(node.size())} # posterior distribution of the BvC match as produced by Gibbs
+    print('a', normalize(counts))
+    #MH_count = 0
+    #MH_rejection_count = 0
+    #MH_convergence = [0,0,0] # posterior distribution of the BvC match as produced by MH
+    Gibbs_count = 0
+    old_prob = zeros(3)
+    Gibbs_convergence_before = [normalize(counts)[0], normalize(counts)[1], normalize(counts)[2]]
+    while True:
+        print('count-start', Gibbs_convergence_before)
+        new_sample = Gibbs_sampler(bayes_net, sample)
+        sample = list(new_sample)
+        counts[new_sample[4]] += 1
+        Gibbs_count += 1
+        Gibbs_convergence_after = [normalize(counts)[0], normalize(counts)[1],normalize(counts)[2]]
+        diff = [abs(a-b) for a, b in zip(Gibbs_convergence_after, Gibbs_convergence_before)]
+        Gibbs_convergence_before = Gibbs_convergence_after
+        print(Gibbs_count)
+        print('counts-end', Gibbs_convergence_after)
+
+
+        stop_check = [d < delta for d in diff]
+        if sum(stop_check) >= 3:
+            return Gibbs_convergence_after, Gibbs_count
+
+
+    #return Gibbs_convergence, MH_convergence, Gibbs_count, MH_count, MH_rejection_count
 
 def sampling_question():
     """Question about sampling performance."""
@@ -473,4 +549,8 @@ print(prob - [0.25, 0.42, 0.31])
 gibbs = Gibbs_sampler(games, [0, 0, 0, 0, 0, 2])
 print(gibbs)
 
+#mh = MH_sampler(games, [0, 0, 0, 0, 0, 2])
+#print(mh)
 
+ans = compare_sampling(games, [0, 0, 0, 0, 0, 2], 0.00001)
+print(ans)
