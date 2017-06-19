@@ -22,6 +22,7 @@ inferenceExample()
 
 from Node import BayesNode
 from Graph import BayesNet
+import numpy as np
 from numpy import zeros, float32, ones, digitize
 from Distribution import DiscreteDistribution, ConditionalDiscreteDistribution
 from Inference import JunctionTreeEngine
@@ -398,68 +399,17 @@ def MH_sampler(bayes_net, initial_state):
     CA_table = CvA.dist.table
 
     variable = [A, B, C, AvB, BvC, CvA]
-    for var in variable:
-        if var == A:
-            candidate = [random.randint(0, 3) for e in variable]
-            #print('A candidate', candidate)
-            candidate_prob = A_table[candidate[0]]
-            #print('here', candidate_prob)
-            sample_prob = A_table[sample[0]]
-            accept_func = min(1, candidate_prob/sample_prob)
-            #print('here', accept_func)
-            prob = random.uniform(0, 1)
-            if prob > accept_func:
-                sample[0] = candidate[0]
+    sample_prob = [0.5,0.5,0.5,0.5,0.5,0.5]
+    cov = [[1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], [0, 0, 0, 1, 0, 0], [0, 0, 0, 0, 1, 0],
+           [0, 0, 0, 0, 0, 1]]
+    candidate_prob = np.random.multivariate_normal((0,0,0,0,0,0,), cov)
+    accept_func = [min(1, e) for e in [c / s for c, s in zip(candidate_prob, sample_prob)]]
+    prob = random.uniform(0, 1)
+    for i in range(len(accept_func)):
+        if prob < accept_func[i]:
+            sample[i] = accept_func[i]
 
-        elif var == B:
-            candidate = [random.randint(0, 3) for e in variable]
-            #print('candidate', candidate)
-            candidate_prob = B_table[candidate[1]]
-            sample_prob = B_table[sample[1]]
-            accept_func = min(1, candidate_prob / sample_prob)
-            #print('here', accept_func)
-            prob = random.uniform(0, 1)
-            if prob > accept_func:
-                sample[1] = candidate[1]
-        elif var == C:
-            candidate = [random.randint(0, 3) for e in variable]
-            #print('candidate', candidate)
-            candidate_prob = C_table[candidate[2]]
-            sample_prob = C_table[sample[2]]
-            accept_func = min(1, candidate_prob / sample_prob)
-            #print('here', accept_func)
-            prob = random.uniform(0, 1)
-            if prob > accept_func:
-                sample[2] = candidate[2]
-        elif var == AvB:
-            candidate = [random.randint(0, 2) for e in variable]
-            #print('candidate', candidate)
-            candidate_prob = AB_table[candidate[0], candidate[1], :]
-            sample_prob = AB_table[sample[0], sample[1], :]
-            accept_func = [min(1, e) for e in [c / s for c, s in zip(candidate_prob, sample_prob)]]
-            #print('here', accept_func)
-            prob = random.uniform(0, 1)
-            sample[3] = determine_bin(prob, accept_func)
-        elif var == BvC:
-            candidate = [random.randint(0, 2) for e in variable]
-            #print('candidate', candidate)
-            candidate_prob = BC_table[candidate[1], candidate[2], :]
-            sample_prob = BC_table[sample[1], sample[2], :]
-            accept_func = [min(1, e) for e in [c / s for c, s in zip(candidate_prob, sample_prob)]]
-            #print('here', accept_func)
-            prob = random.uniform(0, 1)
-            sample[4] = determine_bin(prob, accept_func)
-        else:
-            candidate = [random.randint(0, 2) for e in variable]
-            #print('candidate', candidate)
-            candidate_prob = CA_table[candidate[2], candidate[0], :]
-            sample_prob = CA_table[sample[2], sample[0], :]
-            accept_func = [min(1, e) for e in [c / s for c, s in zip(candidate_prob, sample_prob)]]
-            #print('here', accept_func)
-            prob = random.uniform(0, 1)
-            sample[5] = determine_bin(prob, accept_func)
-
-    return sample
+    return tuple(sample)
 
 def normalize(lst):
     if isinstance(lst, dict):
@@ -472,10 +422,6 @@ def normalize(lst):
 
     return [(e / total) for e in lst]
 
-def f(x):
-    mu = 0
-    sig = 1
-    return (1/(math.sqrt(2*math.pi*sig**2)))*(math.e**(-((x-mu)**2)/(2*sig**2)))
 
 
 def determine_bin(num, lst):
@@ -486,37 +432,45 @@ def determine_bin(num, lst):
             return lst.index(sort_lst[i+1])-1
 
 def compare_sampling(bayes_net,initial_state, delta):
-    """Compare Gibbs and Metropolis-Hastings sampling by calculating how long it takes for each method to converge."""
+    """Compare Gibbs and Metropolis-Hastings sampling by calculating how lo
+    ng it takes for each method to converge."""
     node = bayes_net.get_node_by_name('BvC')  # counts is for BvC only
     sample = initial_state
     Gibbs_count = 0
-    counts = {x: 1.0 for x in range(node.size())} # posterior distribution of the BvC match as produced by Gibbs
-    print('a', normalize(counts))
-    #MH_count = 0
-    #MH_rejection_count = 0
+    MH_count = 0
+    MH_rejection_count = 0
+    gibbs_counts = {x: 1.0 for x in range(node.size())} # posterior distribution of the BvC match as produced by Gibbs
+    mh_counts = {x: 1.0 for x in range(node.size())}  # posterior distribution of the BvC match as produced by Gibbs
     #MH_convergence = [0,0,0] # posterior distribution of the BvC match as produced by MH
     Gibbs_count = 0
     old_prob = zeros(3)
-    Gibbs_convergence_before = [normalize(counts)[0], normalize(counts)[1], normalize(counts)[2]]
+    Gibbs_convergence_before = [normalize(gibbs_counts)[0], normalize(gibbs_counts)[1], normalize(gibbs_counts)[2]]
+    MH_convergence_before = [normalize(mh_counts)[0], normalize(mh_counts)[1], normalize(mh_counts)[2]]
     while True:
-        print('count-start', Gibbs_convergence_before)
-        new_sample = Gibbs_sampler(bayes_net, sample)
-        sample = list(new_sample)
-        counts[new_sample[4]] += 1
+        print('count-start', Gibbs_count)
+        print('count-start1', MH_count)
+        new_sample_gibbs = Gibbs_sampler(bayes_net, sample)
+        new_sample_mh = Gibbs_sampler(bayes_net, sample)
+        sample_gibbs = list(new_sample_gibbs)
+        sample_mh = list(new_sample_mh)
+        gibbs_counts[new_sample_gibbs[4]] += 1
+        mh_counts[new_sample_mh[4]] += 1
         Gibbs_count += 1
-        Gibbs_convergence_after = [normalize(counts)[0], normalize(counts)[1],normalize(counts)[2]]
+        MH_count += 1
+        Gibbs_convergence_after = [normalize(gibbs_counts)[0], normalize(gibbs_counts)[1],normalize(gibbs_counts)[2]]
+        MH_convergence_after = [normalize(mh_counts)[0], normalize(mh_counts)[1], normalize(mh_counts)[2]]
         diff = [abs(a-b) for a, b in zip(Gibbs_convergence_after, Gibbs_convergence_before)]
         Gibbs_convergence_before = Gibbs_convergence_after
+        MH_convergence_before = MH_convergence_after
         print(Gibbs_count)
-        print('counts-end', Gibbs_convergence_after)
+        print('counts-end', gibbs_counts)
+        print('counts-end1', mh_counts)
 
 
         stop_check = [d < delta for d in diff]
         if sum(stop_check) >= 3:
-            return Gibbs_convergence_after, Gibbs_count
+            return Gibbs_convergence_after, MH_convergence_after, Gibbs_count, MH_count, MH_rejection_count
 
-
-    #return Gibbs_convergence, MH_convergence, Gibbs_count, MH_count, MH_rejection_count
 
 def sampling_question():
     """Question about sampling performance."""
@@ -538,7 +492,7 @@ ans1 = get_alarm_prob(power_plant1, True)
 ans2 = get_gauge_prob(power_plant1, True)
 ans3 = get_temperature_prob(power_plant1, True)
 print(ans3)
-'''
+
 
 games = get_game_network()
 print(games)
@@ -546,11 +500,12 @@ prob = calculate_posterior(games)
 print(prob)
 print(prob - [0.25, 0.42, 0.31])
 
-gibbs = Gibbs_sampler(games, [0, 0, 0, 0, 0, 2])
-print(gibbs)
+#gibbs = Gibbs_sampler(games, [0, 0, 0, 0, 0, 2])
+#print(gibbs)
 
-#mh = MH_sampler(games, [0, 0, 0, 0, 0, 2])
-#print(mh)
+mh = MH_sampler(games, [0, 0, 0, 0, 0, 2])
+print(mh)
 
-ans = compare_sampling(games, [0, 0, 0, 0, 0, 2], 0.00001)
+ans = compare_sampling(games, [0, 0, 0, 0, 0, 2], 0.0001)
 print(ans)
+'''
